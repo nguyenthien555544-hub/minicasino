@@ -59,12 +59,14 @@ body{
     <button class="btn" onclick="openScreen('bank')">BANK</button>
   </div>
   <div class="box">Số dư: <b id="bal"></b> đ</div>
+
   <button class="game-btn" onclick="openScreen('baucu')">🦀 BẦU CUA</button>
   <button class="game-btn" onclick="openScreen('chanle')">🎲 CHẴN LẺ</button>
   <button class="game-btn" onclick="openScreen('lottery')">🎟 BỐC THĂM</button>
+  <button class="game-btn" onclick="openScreen('miner')">⛏️ MÁY ĐÀO</button>
 </div>
 
-<!-- BANK -->
+<!-- ================= BANK ================= -->
 <div id="bank" class="screen">
   <div class="top">
     <button class="btn" onclick="openScreen('home')">⬅</button>
@@ -86,7 +88,24 @@ body{
   </div>
 </div>
 
-<!-- BẦU CUA -->
+<!-- ================= MÁY ĐÀO ================= -->
+<div id="miner" class="screen">
+  <div class="top">
+    <button class="btn" onclick="openScreen('home')">⬅</button>
+    <b>⛏️ MÁY ĐÀO</b>
+  </div>
+
+  <div class="box">Số dư: <b id="minerBal"></b> đ</div>
+  <div class="box">Tổng đã đào: <b id="totalMined"></b> đ</div>
+
+  <div class="box" id="minerInfo"></div>
+
+  <button class="game-btn" id="buyMinerBtn" onclick="buyMiner()">
+    MUA 1 MÁY (1 TỈ)
+  </button>
+</div>
+
+<!-- ================= BẦU CUA ================= -->
 <div id="baucu" class="screen">
 <div class="top">
 <button class="btn" onclick="openScreen('home')">⬅</button>
@@ -117,7 +136,7 @@ body{
 <div class="box history" id="bcHis"></div>
 </div>
 
-<!-- CHẴN LẺ -->
+<!-- ================= CHẴN LẺ ================= -->
 <div id="chanle" class="screen">
 <div class="top">
 <button class="btn" onclick="openScreen('home')">⬅</button>
@@ -144,7 +163,7 @@ body{
 <div class="box history" id="clHis"></div>
 </div>
 
-<!-- BỐC THĂM -->
+<!-- ================= BỐC THĂM ================= -->
 <div id="lottery" class="screen">
 <div class="top">
 <button class="btn" onclick="openScreen('home')">⬅</button>
@@ -152,7 +171,6 @@ body{
 </div>
 
 <div class="box">Giá chơi: 500.000</div>
-
 <div class="grid3" id="tickets"></div>
 <button class="game-btn" onclick="playLottery()">XÁC NHẬN</button>
 <div class="box" id="lotResult"></div>
@@ -164,21 +182,33 @@ let bal = +localStorage.bal || 500000000;
 let addCount = +localStorage.add || 0;
 let bank36=+localStorage.b36||0,bank67=+localStorage.b67||0,bankN=+localStorage.bn||0;
 
+/* ===== MINER ===== */
+const MINER_PRICE = 1_000_000_000;
+const MINER_PROFIT = 50_000_000;
+const MINER_TIME = 86400;
+const MINER_MAX = 10;
+
+let miners = JSON.parse(localStorage.miners || "[]");
+let totalMined = +localStorage.totalMined || 0;
+
 function save(){
  localStorage.bal=bal;localStorage.add=addCount;
- localStorage.b36=bank36;localStorage.b67=bank67;localStorage.bn=bankN
+ localStorage.b36=bank36;localStorage.b67=bank67;localStorage.bn=bankN;
+ localStorage.miners=JSON.stringify(miners);
+ localStorage.totalMined=totalMined;
 }
 function update(){
- balEl();
  document.getElementById("bal").innerText=bal.toLocaleString();
  document.getElementById("balBank").innerText=bal.toLocaleString();
+ document.getElementById("minerBal").innerText=bal.toLocaleString();
+ document.getElementById("totalMined").innerText=totalMined.toLocaleString();
  document.getElementById("b36").innerText=bank36.toLocaleString();
  document.getElementById("b67").innerText=bank67.toLocaleString();
  document.getElementById("bn").innerText=bankN.toLocaleString();
  save();
 }
-function balEl(){}
 update();
+
 function openScreen(id){
  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
  document.getElementById(id).classList.add("active");
@@ -190,39 +220,67 @@ function addMoney(){
  bal+=100000000;addCount++;update();
 }
 function withdraw(b){
- let v=prompt("Nhập tiền rút");
- v=+v;if(v>bal||v<=0)return;
+ let v=+prompt("Nhập tiền rút"); if(v<=0||v>bal)return;
  bal-=v;
- if(b==36)bank36+=v;
- else if(b==67)bank67+=v;
- else bankN+=v;
+ if(b==36)bank36+=v; else if(b==67)bank67+=v; else bankN+=v;
  update();
 }
 function deposit(){
- let v=prompt("Nhập tiền nạp");v=+v;
- if(v<=0)return;
+ let v=+prompt("Nhập tiền nạp"); if(v<=0)return;
  if(bank36>=v){bank36-=v;bal+=v}
  else if(bank67>=v){bank67-=v;bal+=v}
  else if(bankN>=v){bankN-=v;bal+=v}
  update();
 }
 
-/* ===== BẦU CUA ===== */
-let bcBet=0,bcPick="";
+/* ===== MINER LOGIC ===== */
+function buyMiner(){
+ if(bal<MINER_PRICE)return alert("Không đủ tiền");
+ if(miners.length>=MINER_MAX)return;
+ bal-=MINER_PRICE;
+ miners.push({start:Date.now(),last:Date.now()});
+ update();
+}
+setInterval(()=>{
+ let now=Date.now(),alive=[];
+ miners.forEach(m=>{
+  let t=Math.floor((now-m.start)/1000);
+  if(t<MINER_TIME){
+   let d=Math.floor((now-m.last)/1000);
+   if(d>0){
+    let earn=d*MINER_PROFIT;
+    bal+=earn;totalMined+=earn;
+    m.last=now;
+   }
+   alive.push(m);
+  }
+ });
+ miners=alive;
+ let info=document.getElementById("minerInfo");
+ if(miners.length){
+  let remain=MINER_TIME-Math.floor((now-miners[0].start)/1000);
+  info.innerHTML=
+   `⚙️ Máy: ${miners.length}/${MINER_MAX}<br>
+    💰 +${(MINER_PROFIT*miners.length).toLocaleString()} / giây<br>
+    ⏳ Máy sớm nhất còn: ${Math.floor(remain/3600)}h`;
+ }else info.innerText="Chưa có máy đào";
+ document.getElementById("buyMinerBtn").disabled = miners.length>=MINER_MAX;
+ update();
+},1000);
+
+/* ===== CÁC GAME CŨ (GIỮ NGUYÊN) ===== */
+let bcBet=0,bcPick="",bcT=10;
 function setBet(v){if(bal<v)return;bcBet=v}
-function betBC(x){bcPick=x;document.getElementById("bcBet").innerText=bcPick+" "+bcBet}
-let bcT=10;
+function betBC(x){bcPick=x;document.getElementById("bcBet").innerText=x+" "+bcBet}
 setInterval(()=>{
  document.getElementById("bcTime").innerText=bcT;
  if(bcT--<=0){
-  bcT=10;
-  if(!bcPick||!bcBet)return;
+  bcT=10;if(!bcPick||!bcBet)return;
   bal-=bcBet;
   let a=["Bầu","Cua","Tôm","Cá","Gà","Nai"];
   let r=[a[rnd()],a[rnd()],a[rnd()]];
   document.getElementById("bcDice").innerText=r.join(" ");
-  let c=r.filter(x=>x==bcPick).length;
-  let win=0;
+  let c=r.filter(x=>x==bcPick).length,win=0;
   if(c==3){
    let p=Math.random()*100;
    if(p<2.5)win=bcBet*50;
@@ -233,35 +291,30 @@ setInterval(()=>{
   document.getElementById("bcHis").innerHTML=
    `<div>${bcPick} | ${r.join("-")} | +${win}</div>`+
    document.getElementById("bcHis").innerHTML;
-  bcPick="";bcBet=0;
-  update();
+  bcPick="";bcBet=0;update();
  }
 },1000);
 
-/* ===== CHẴN LẺ ===== */
 let clPick="",clBet=0,clT=10;
 function setBetCL(v){if(bal<v)return;clBet=v}
 function pickCL(x){clPick=x;document.getElementById("clBet").innerText=x+" "+clBet}
 setInterval(()=>{
  document.getElementById("clTime").innerText=clT;
  if(clT--<=0){
-  clT=10;
-  if(!clPick||!clBet)return;
+  clT=10;if(!clPick||!clBet)return;
   bal-=clBet;
   let d=[rnd()+1,rnd()+1,rnd()+1,rnd()+1];
   document.getElementById("clDice").innerText=d.join(" ");
   let s=d.reduce((a,b)=>a+b,0);
-  let win=(s%2==0&&clPick=="Chẵn")||(s%2==1&&clPick=="Lẻ")?clBet*2:0;
+  let win=((s%2==0&&clPick=="Chẵn")||(s%2==1&&clPick=="Lẻ"))?clBet*2:0;
   bal+=win;
   document.getElementById("clHis").innerHTML=
    `<div>${clPick} | ${s} | +${win}</div>`+
    document.getElementById("clHis").innerHTML;
-  clPick="";clBet=0;
-  update();
+  clPick="";clBet=0;update();
  }
 },1000);
 
-/* ===== BỐC THĂM ===== */
 const gifts=[
 {t:"May mắn",v:0,p:70},
 {t:"Cái nịt",v:0,p:50},
@@ -271,10 +324,7 @@ const gifts=[
 {t:"+100M",v:100000000,p:.5}
 ];
 let pick=[];
-function drawGift(){
- let r=Math.random()*100,s=0;
- for(let g of gifts){s+=g.p;if(r<s)return g}
-}
+function drawGift(){let r=Math.random()*100,s=0;for(let g of gifts){s+=g.p;if(r<s)return g}}
 function renderTickets(){
  let t=document.getElementById("tickets");t.innerHTML="";
  for(let i=0;i<6;i++){
